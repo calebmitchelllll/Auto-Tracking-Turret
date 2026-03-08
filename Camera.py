@@ -1,7 +1,5 @@
 import cv2
 import os
-import sys
-
 
 class Camera:
     def __init__(self, index=0, width=640, height=360):
