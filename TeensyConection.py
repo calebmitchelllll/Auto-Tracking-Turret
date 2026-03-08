@@ -104,3 +104,32 @@ class USBConnection:
             raise RuntimeError("USB not connected")
 
         return self.ser.readline().decode(errors="ignore").strip()
+    
+    
+    def send_error_mode(self, error_x, error_y, mode):
+        """
+        Send: error_x,error_y,mode\\n
+
+        mode can be:
+            - 0 or 1
+            - "idle"
+            - "tracking"
+        """
+        if isinstance(mode, str):
+            mode_lower = mode.strip().lower()
+            if mode_lower == "idle":
+                mode_value = self.MODE_IDLE
+            elif mode_lower == "tracking":
+                mode_value = self.MODE_TRACKING
+            else:
+                raise ValueError(f"Invalid mode string: {mode}")
+        elif isinstance(mode, int):
+            if mode not in (self.MODE_IDLE, self.MODE_TRACKING):
+                raise ValueError(f"Invalid numeric mode: {mode}")
+            mode_value = mode
+        else:
+            raise TypeError("mode must be int or str")
+
+        msg = f"{float(error_x):.2f},{float(error_y):.2f},{mode_value}\n"
+        self.send(msg)
+        print(f"[USB] sent: {msg.strip()}")
