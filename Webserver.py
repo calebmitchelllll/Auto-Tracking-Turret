@@ -53,20 +53,32 @@ class Webserver:
             <title>Pan / Tilt PID Gains</title>
             <meta name="viewport" content="width=device-width, initial-scale=1" />
             <style>
+
                 body {
                     font-family: Arial, sans-serif;
-                    max-width: 600px;
+                    max-width: 900px;
                     margin: 40px auto;
                     padding: 20px;
                     background: #111;
                     color: white;
                 }
 
+                .card-container {
+                    display: flex;
+                    gap: 20px;
+                }
+
                 .card {
+                    flex: 1;
                     background: #1c1c1c;
                     padding: 20px;
                     border-radius: 12px;
-                    margin-bottom: 20px;
+                }
+
+                @media (max-width: 700px) {
+                    .card-container {
+                        flex-direction: column;
+                    }
                 }
 
                 h1, h2 {
@@ -114,41 +126,48 @@ class Webserver:
                 button:hover {
                     background: #3a3a3a;
                 }
+
             </style>
         </head>
+
         <body>
+
             <h1>Pan / Tilt PID Gain Tuning</h1>
 
-            <div class="card">
-                <h2>Pan</h2>
+            <div class="card-container">
 
-                <label for="pan_kp">Pan Kp</label>
-                <input type="range" id="pan_kp" min="0" max="10" step="0.01" value="{{ pan_kp }}">
-                <div class="value">Value: <span id="pan_kp_value">{{ pan_kp }}</span></div>
+                <div class="card">
+                    <h2>Pan</h2>
 
-                <label for="pan_ki" style="margin-top:16px;">Pan Ki</label>
-                <input type="range" id="pan_ki" min="0" max="10" step="0.01" value="{{ pan_ki }}">
-                <div class="value">Value: <span id="pan_ki_value">{{ pan_ki }}</span></div>
+                    <label for="pan_kp">Pan Kp</label>
+                    <input type="range" id="pan_kp" min="0" max="10" step="0.01" value="{{ pan_kp }}">
+                    <div class="value">Value: <span id="pan_kp_value">{{ pan_kp }}</span></div>
 
-                <label for="pan_kd" style="margin-top:16px;">Pan Kd</label>
-                <input type="range" id="pan_kd" min="0" max="10" step="0.01" value="{{ pan_kd }}">
-                <div class="value">Value: <span id="pan_kd_value">{{ pan_kd }}</span></div>
-            </div>
+                    <label for="pan_ki" style="margin-top:16px;">Pan Ki</label>
+                    <input type="range" id="pan_ki" min="0" max="10" step="0.01" value="{{ pan_ki }}">
+                    <div class="value">Value: <span id="pan_ki_value">{{ pan_ki }}</span></div>
 
-            <div class="card">
-                <h2>Tilt</h2>
+                    <label for="pan_kd" style="margin-top:16px;">Pan Kd</label>
+                    <input type="range" id="pan_kd" min="0" max="10" step="0.01" value="{{ pan_kd }}">
+                    <div class="value">Value: <span id="pan_kd_value">{{ pan_kd }}</span></div>
+                </div>
 
-                <label for="tilt_kp">Tilt Kp</label>
-                <input type="range" id="tilt_kp" min="0" max="10" step="0.01" value="{{ tilt_kp }}">
-                <div class="value">Value: <span id="tilt_kp_value">{{ tilt_kp }}</span></div>
+                <div class="card">
+                    <h2>Tilt</h2>
 
-                <label for="tilt_ki" style="margin-top:16px;">Tilt Ki</label>
-                <input type="range" id="tilt_ki" min="0" max="10" step="0.01" value="{{ tilt_ki }}">
-                <div class="value">Value: <span id="tilt_ki_value">{{ tilt_ki }}</span></div>
+                    <label for="tilt_kp">Tilt Kp</label>
+                    <input type="range" id="tilt_kp" min="0" max="10" step="0.01" value="{{ tilt_kp }}">
+                    <div class="value">Value: <span id="tilt_kp_value">{{ tilt_kp }}</span></div>
 
-                <label for="tilt_kd" style="margin-top:16px;">Tilt Kd</label>
-                <input type="range" id="tilt_kd" min="0" max="10" step="0.01" value="{{ tilt_kd }}">
-                <div class="value">Value: <span id="tilt_kd_value">{{ tilt_kd }}</span></div>
+                    <label for="tilt_ki" style="margin-top:16px;">Tilt Ki</label>
+                    <input type="range" id="tilt_ki" min="0" max="10" step="0.01" value="{{ tilt_ki }}">
+                    <div class="value">Value: <span id="tilt_ki_value">{{ tilt_ki }}</span></div>
+
+                    <label for="tilt_kd" style="margin-top:16px;">Tilt Kd</label>
+                    <input type="range" id="tilt_kd" min="0" max="10" step="0.01" value="{{ tilt_kd }}">
+                    <div class="value">Value: <span id="tilt_kd_value">{{ tilt_kd }}</span></div>
+                </div>
+
             </div>
 
             <div class="button-row">
@@ -158,14 +177,16 @@ class Webserver:
             <div class="status" id="status">Ready</div>
 
             <script>
+
                 const statusEl = document.getElementById("status");
 
                 const sliderIds = [
-                    "pan_kp", "pan_ki", "pan_kd",
-                    "tilt_kp", "tilt_ki", "tilt_kd"
+                    "pan_kp","pan_ki","pan_kd",
+                    "tilt_kp","tilt_ki","tilt_kd"
                 ];
 
                 function setupSlider(sliderId) {
+
                     const slider = document.getElementById(sliderId);
                     const valueEl = document.getElementById(sliderId + "_value");
 
@@ -175,10 +196,12 @@ class Webserver:
                     });
 
                     slider.addEventListener("change", async () => {
+
                         const body = {};
                         body[sliderId] = parseFloat(slider.value);
 
                         try {
+
                             const response = await fetch("/save", {
                                 method: "POST",
                                 headers: {
@@ -189,14 +212,18 @@ class Webserver:
 
                             const data = await response.json();
                             statusEl.textContent = data.message;
-                        } catch (err) {
+
+                        } catch {
                             statusEl.textContent = "Save failed";
                         }
+
                     });
                 }
 
                 async function resetDefaults() {
+
                     try {
+
                         const response = await fetch("/reset", {
                             method: "POST",
                             headers: {
@@ -206,21 +233,25 @@ class Webserver:
 
                         const data = await response.json();
 
-                        sliderIds.forEach((id) => {
+                        sliderIds.forEach(id => {
                             const slider = document.getElementById(id);
                             const valueEl = document.getElementById(id + "_value");
+
                             slider.value = data.gains[id];
                             valueEl.textContent = data.gains[id];
                         });
 
                         statusEl.textContent = data.message;
-                    } catch (err) {
+
+                    } catch {
                         statusEl.textContent = "Reset failed";
                     }
                 }
 
                 sliderIds.forEach(setupSlider);
+
             </script>
+
         </body>
         </html>
         """
@@ -251,38 +282,23 @@ class Webserver:
                 f"tilt_kd:{gains['tilt_kd']:.3f}"
             )
 
-            return jsonify({
-                "success": True,
-                "message": "Saved",
-                "gains": gains
-            })
+            return jsonify({"success": True, "message": "Saved", "gains": gains})
 
         @self.app.route("/reset", methods=["POST"])
         def reset():
             gains = self.default_gains.copy()
             self.save_gains(gains)
 
-            print(
-                "[Webserver] Gains reset to default: "
-                f"pan_kp:{gains['pan_kp']:.3f}, "
-                f"pan_ki:{gains['pan_ki']:.3f}, "
-                f"pan_kd:{gains['pan_kd']:.3f}, "
-                f"tilt_kp:{gains['tilt_kp']:.3f}, "
-                f"tilt_ki:{gains['tilt_ki']:.3f}, "
-                f"tilt_kd:{gains['tilt_kd']:.3f}"
-            )
+            print("[Webserver] Gains reset to default")
 
-            return jsonify({
-                "success": True,
-                "message": "Reset to defaults",
-                "gains": gains
-            })
+            return jsonify({"success": True, "message": "Reset to defaults", "gains": gains})
 
         @self.app.route("/gains", methods=["GET"])
         def get_gains():
             return jsonify(self.load_gains())
 
     def run(self):
+
         import logging
         import flask.cli
 

@@ -1,8 +1,8 @@
 {
-  "pan_kp": 1.0,
-  "pan_ki": 1.0,
-  "pan_kd": 1.0,
+  "pan_kp": 0.0,
+  "pan_ki": 2.51,
+  "pan_kd": 4.42,
   "tilt_kp": 1.0,
-  "tilt_ki": 1.0,
-  "tilt_kd": 1.0
+  "tilt_ki": 3.67,
+  "tilt_kd": 2.23
 }
