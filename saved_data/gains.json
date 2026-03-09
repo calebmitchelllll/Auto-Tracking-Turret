@@ -1,4 +1,8 @@
 {
-  "pan_kp": 4.94,
-  "tilt_kp": 3.5
+  "pan_kp": 1.0,
+  "pan_ki": 1.0,
+  "pan_kd": 1.0,
+  "tilt_kp": 1.0,
+  "tilt_ki": 1.0,
+  "tilt_kd": 1.0
 }
