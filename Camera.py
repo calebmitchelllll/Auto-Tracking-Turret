@@ -32,8 +32,6 @@ class Camera:
         else:
             print("[Camera] Arducam not found, fallback camera used")
 
-        print(f"[Camera] Inference resolution: {self.infer_width}x{self.infer_height}")
-
     def _find_high_fps_camera(self, fallback):
         for i in range(5):
             cap = self._silent_open(i)
