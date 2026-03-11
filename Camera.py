@@ -1,6 +1,7 @@
 import cv2
 import os
 
+
 class Camera:
     def __init__(self, index=0, width=1280, height=800, target_fps=120,
                  infer_width=640, infer_height=400):
@@ -12,18 +13,15 @@ class Camera:
         if not self.cap.isOpened():
             raise RuntimeError("[Camera] Could not open camera")
 
-        # Request camera settings
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         self.cap.set(cv2.CAP_PROP_FPS, target_fps)
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-        # Actual camera mode
         self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = self.cap.get(cv2.CAP_PROP_FPS)
 
-        # Inference resize resolution
         self.infer_width = infer_width
         self.infer_height = infer_height
 
@@ -63,16 +61,15 @@ class Camera:
     def read(self):
         ret, frame = self.cap.read()
         if not ret:
-            return None, None
+            return None
 
-        # Resize for inference
         small = cv2.resize(
             frame,
             (self.infer_width, self.infer_height),
             interpolation=cv2.INTER_LINEAR
         )
 
-        return frame, small
+        return small
 
     def release(self):
         self.cap.release()
