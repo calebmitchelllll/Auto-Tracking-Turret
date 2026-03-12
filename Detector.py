@@ -7,13 +7,7 @@ class Detector:
         self.model = YOLO(model_path)
         self.conf = conf
         self.min_area = min_area
-
-        if torch.cuda.is_available():
-            self.device = "cuda"
-        elif torch.backends.mps.is_available():
-            self.device = "mps"
-        else:
-            self.device = "cpu"
+        self.device = "mps" if torch.backends.mps.is_available() else "cpu"
 
         print("[Detector] Initialized using:", self.device)
 

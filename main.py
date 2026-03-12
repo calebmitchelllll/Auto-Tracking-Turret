@@ -9,6 +9,7 @@ from Detector import Detector
 from Webserver import Webserver
 
 # initializations
+#TODO: initialize USB serial connection to teensy here and send saved gains from gains.json on startup
 server = Webserver(json_file="saved_data/gains.json", host="127.0.0.1", port=5000)
 threading.Thread(target=server.run, daemon=True).start()
 
@@ -18,12 +19,17 @@ tracker = DetectionTracker(smoothing_alpha=0.2, velocity_alpha=0.25, prediction_
 
 prev_time = time.time()
 
+deadband_x = 8
+deadband_y = 8
+
 while True:
     small = cam.read()
     if small is None:
         continue
 
     detections = det.detect(small)
+
+    #TODO: if gains are updated, send new gains to teensy
     gains = server.load_gains()
 
     pan_kp = gains["pan_kp"]
@@ -47,6 +53,12 @@ while True:
         err_x = track["err_x"]
         err_y = track["err_y"]
 
+        if abs(err_x) < deadband_x:
+            err_x = 0
+
+        if abs(err_y) < deadband_y:
+            err_y = 0
+
         #TODO: sent these values to teensy
         teensy_err_x = err_x
         teensy_err_y = err_y
@@ -59,6 +71,7 @@ while True:
 
     prev_time = print_fps(prev_time)
 
+    #this is just a placeholder for now, eventually this wont be printed to the console but sent directly to the teensy over serial
     if detected:
         print("\033[2K\r" + f"[TEENSY ERROR] ({teensy_err_x:6.1f}, {teensy_err_y:6.1f})")
     else:
