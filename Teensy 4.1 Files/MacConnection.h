@@ -23,6 +23,8 @@ public:
     void sendFloat(const String &label, float value);
     void sendInt(const String &label, int value);
 
+    void readStream();
+
     bool available();
     String readLine();
 };

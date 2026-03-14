@@ -62,59 +62,9 @@ void resetControl()
     tiltPID.reset();
 }
 
-bool parseErrMessage(const String &msg, float &x, float &y)
-{
-    // Expected: ERR,12.3,-4.5
-    if (!msg.startsWith("ERR,"))
-        return false;
 
-    int firstComma = msg.indexOf(',');
-    int secondComma = msg.indexOf(',', firstComma + 1);
 
-    if (firstComma < 0 || secondComma < 0)
-        return false;
 
-    String xStr = msg.substring(firstComma + 1, secondComma);
-    String yStr = msg.substring(secondComma + 1);
-
-    x = xStr.toFloat();
-    y = yStr.toFloat();
-    return true;
-}
-
-bool parseGainsMessage(
-    const String &msg,
-    float &panKp, float &panKi, float &panKd,
-    float &tiltKp, float &tiltKi, float &tiltKd)
-{
-    // Expected:
-    // GAINS,pan_kp,pan_ki,pan_kd,tilt_kp,tilt_ki,tilt_kd
-    if (!msg.startsWith("GAINS,"))
-        return false;
-
-    int commas[7];
-    int count = 0;
-
-    for (int i = 0; i < msg.length() && count < 7; i++)
-    {
-        if (msg.charAt(i) == ',')
-        {
-            commas[count++] = i;
-        }
-    }
-
-    if (count != 6)
-        return false;
-
-    panKp = msg.substring(commas[0] + 1, commas[1]).toFloat();
-    panKi = msg.substring(commas[1] + 1, commas[2]).toFloat();
-    panKd = msg.substring(commas[2] + 1, commas[3]).toFloat();
-    tiltKp = msg.substring(commas[3] + 1, commas[4]).toFloat();
-    tiltKi = msg.substring(commas[4] + 1, commas[5]).toFloat();
-    tiltKd = msg.substring(commas[5] + 1).toFloat();
-
-    return true;
-}
 
 void handleSerialLine(const String &msg)
 {

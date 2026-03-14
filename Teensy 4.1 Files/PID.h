@@ -1,19 +1,40 @@
 #pragma once
-#include <Arduino.h>
+
+struct PIDValues
+{
+    float pan_kp;
+    float pan_ki;
+    float pan_kd;
+
+    float tilt_kp;
+    float tilt_ki;
+    float tilt_kd;
+};
+
+// this function exists somewhere else
+PIDValues getPIDValues();
 
 class PID
 {
 public:
-    PID(float kp, float ki, float kd, float min_out, float max_out);
-    void setTunings(float kp, float ki, float kd);
+    PID(float integral_limit, float output_limit, float derivative_alpha, float deadband);
+
+    float updatePan(float target, float actual, float dt);
+    float updateTilt(float target, float actual, float dt);
+
     void reset();
-    float compute(float setpoint, float measurement);
 
 private:
-    float Kp, Ki, Kd;
-    float integral;
-    float prev_error;
-    float prev_derivative;
-    float out_min, out_max;
-    uint32_t last_time;
+    float pan_integral;
+    float pan_prev_error;
+    float pan_d;
+
+    float tilt_integral;
+    float tilt_prev_error;
+    float tilt_d;
+
+    float integral_limit;
+    float output_limit;
+    float derivative_alpha;
+    float deadband;
 };

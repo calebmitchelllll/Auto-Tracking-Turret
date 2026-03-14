@@ -1,43 +1,13 @@
 import cv2
 import threading
 import time
+
 from Utils import print_fps
 
 from Camera import Camera
 from Detector import Detector
 from Webserver import Webserver
 from KalmanFilter2D import KalmanFilter2D
-
-
-def choose_best_detection(detections, kf):
-    """
-    Choose the detection that best matches the current Kalman track.
-    If Kalman is not initialized yet, return the first detection.
-    """
-    if len(detections) == 0:
-        return None
-
-    if not kf.initialized:
-        return detections[0]
-
-    state = kf.get_state()
-    pred_x = state["x"]
-    pred_y = state["y"]
-
-    best_det = None
-    best_dist2 = float("inf")
-
-    for det in detections:
-        cx, cy, x1, y1, x2, y2 = det
-        dx = cx - pred_x
-        dy = cy - pred_y
-        dist2 = dx * dx + dy * dy
-
-        if dist2 < best_dist2:
-            best_dist2 = dist2
-            best_det = det
-
-    return best_det
 
 
 # initializations
@@ -90,7 +60,7 @@ while True:
         kf.predict()
 
     # choose the best matching detection
-    best_detection = choose_best_detection(raw_detections, kf)
+    best_detection = kf.choose_best_detection(raw_detections)
 
     if best_detection is not None:
         raw_cx, raw_cy, x1, y1, x2, y2 = best_detection

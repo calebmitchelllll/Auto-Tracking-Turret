@@ -1,70 +1,98 @@
 #include "PID.h"
+#include <math.h>
 
-PID::PID(float kp, float ki, float kd, float min_out, float max_out)
+PID::PID(float integral_limit_,
+         float output_limit_,
+         float derivative_alpha_,
+         float deadband_)
 {
-    Kp = kp;
-    Ki = ki;
-    Kd = kd;
+    integral_limit = integral_limit_;
+    output_limit = output_limit_;
+    derivative_alpha = derivative_alpha_;
+    deadband = deadband_;
 
-    out_min = min_out;
-    out_max = max_out;
-
-    integral = 0;
-    prev_error = 0;
-    prev_derivative = 0;
-    last_time = micros();
-}
-
-void PID::setTunings(float kp, float ki, float kd)
-{
-    Kp = kp;
-    Ki = ki;
-    Kd = kd;
+    reset();
 }
 
 void PID::reset()
 {
-    integral = 0;
-    prev_error = 0;
-    prev_derivative = 0;
-    last_time = micros();
+    pan_integral = 0;
+    pan_prev_error = 0;
+    pan_d = 0;
+
+    tilt_integral = 0;
+    tilt_prev_error = 0;
+    tilt_d = 0;
 }
 
-float PID::compute(float setpoint, float measurement)
+float PID::updatePan(float target, float actual, float dt)
 {
-    uint32_t now = micros();
-    float dt = (now - last_time) * 1e-6f;
-    last_time = now;
+    PIDValues gains = getPIDValues();
 
-    if (dt <= 0)
+    float error = target - actual;
+
+    if (fabs(error) < deadband)
         return 0;
 
-    float error = setpoint - measurement;
+    // integral
+    pan_integral += error * dt;
 
-    integral += error * dt;
+    if (pan_integral > integral_limit)
+        pan_integral = integral_limit;
+    if (pan_integral < -integral_limit)
+        pan_integral = -integral_limit;
 
-    if (integral > out_max)
-        integral = out_max;
-    if (integral < out_min)
-        integral = out_min;
+    // derivative (filtered)
+    float raw_d = (error - pan_prev_error) / dt;
+    pan_d = derivative_alpha * pan_d + (1 - derivative_alpha) * raw_d;
 
-    float derivative = (error - prev_error) / dt;
+    pan_prev_error = error;
 
-    float alpha = 0.7;
-    derivative = alpha * prev_derivative + (1 - alpha) * derivative;
+    float out =
+        -(gains.pan_kp * error +
+          gains.pan_ki * pan_integral +
+          gains.pan_kd * pan_d);
 
-    prev_derivative = derivative;
-    prev_error = error;
+    if (out > output_limit)
+        out = output_limit;
+    if (out < -output_limit)
+        out = -output_limit;
 
-    float output =
-        Kp * error +
-        Ki * integral +
-        Kd * derivative;
+    return out;
+}
 
-    if (output > out_max)
-        output = out_max;
-    if (output < out_min)
-        output = out_min;
+float PID::updateTilt(float target, float actual, float dt)
+{
+    PIDValues gains = getPIDValues();
 
-    return output;
+    float error = target - actual;
+
+    if (fabs(error) < deadband)
+        return 0;
+
+    // integral
+    tilt_integral += error * dt;
+
+    if (tilt_integral > integral_limit)
+        tilt_integral = integral_limit;
+    if (tilt_integral < -integral_limit)
+        tilt_integral = -integral_limit;
+
+    // derivative (filtered)
+    float raw_d = (error - tilt_prev_error) / dt;
+    tilt_d = derivative_alpha * tilt_d + (1 - derivative_alpha) * raw_d;
+
+    tilt_prev_error = error;
+
+    float out =
+        -(gains.tilt_kp * error +
+          gains.tilt_ki * tilt_integral +
+          gains.tilt_kd * tilt_d);
+
+    if (out > output_limit)
+        out = output_limit;
+    if (out < -output_limit)
+        out = -output_limit;
+
+    return out;
 }

@@ -168,7 +168,7 @@ class KalmanFilter2D:
 
         return (dx * dx + dy * dy) <= (max_jump * max_jump)
     
-    def choose_best_detection(detections, kf):
+    def choose_best_detection(self, detections):
         """
         Choose the detection that best matches the current Kalman track.
         If Kalman is not initialized yet, return the first detection.
@@ -176,10 +176,10 @@ class KalmanFilter2D:
         if len(detections) == 0:
             return None
 
-        if not kf.initialized:
+        if not self.initialized:
             return detections[0]
 
-        state = kf.get_state()
+        state = self.get_state()
         pred_x = state["x"]
         pred_y = state["y"]
 
