@@ -18,7 +18,7 @@ cam = Camera()
 det = Detector("YOLO/nano.pt")
 
 kf = KalmanFilter2D(
-    process_noise=40.0,
+    process_noise=300.0,
     measurement_noise=8.0,
     initial_uncertainty=500.0,
     max_dt=0.1,

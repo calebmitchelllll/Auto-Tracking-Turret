@@ -4,10 +4,11 @@ import os
 
 
 class Webserver:
-    def __init__(self, json_file="saved_data/gains.json", host="127.0.0.1", port=5000):
+    def __init__(self, json_file="./saved_data/gains.json", host="127.0.0.1", port=5000, serial=None):
         self.json_file = json_file
         self.host = host
         self.port = port
+        self.serial = serial
         self.app = Flask(__name__)
         self.default_gains = {
             "pan_kp": 1.0,
@@ -15,7 +16,9 @@ class Webserver:
             "pan_kd": 1.0,
             "tilt_kp": 1.0,
             "tilt_ki": 1.0,
-            "tilt_kd": 1.0
+            "tilt_kd": 1.0,
+            "set_velocity": 0.0,
+            "set_position": 0.0
         }
         self._setup_routes()
 
@@ -56,7 +59,7 @@ class Webserver:
 
                 body {
                     font-family: Arial, sans-serif;
-                    max-width: 900px;
+                    max-width: 1100px;
                     margin: 40px auto;
                     padding: 20px;
                     background: #111;
@@ -66,6 +69,7 @@ class Webserver:
                 .card-container {
                     display: flex;
                     gap: 20px;
+                    align-items: stretch;
                 }
 
                 .card {
@@ -75,7 +79,7 @@ class Webserver:
                     border-radius: 12px;
                 }
 
-                @media (max-width: 700px) {
+                @media (max-width: 900px) {
                     .card-container {
                         flex-direction: column;
                     }
@@ -95,6 +99,17 @@ class Webserver:
                     width: 100%;
                 }
 
+                input[type=number] {
+                    width: 100%;
+                    padding: 10px;
+                    border-radius: 8px;
+                    border: none;
+                    background: #2a2a2a;
+                    color: white;
+                    font-size: 16px;
+                    box-sizing: border-box;
+                }
+
                 .value {
                     font-size: 16px;
                     margin-top: 8px;
@@ -111,6 +126,7 @@ class Webserver:
                     display: flex;
                     gap: 12px;
                     margin-top: 20px;
+                    flex-wrap: wrap;
                 }
 
                 button {
@@ -125,6 +141,10 @@ class Webserver:
 
                 button:hover {
                     background: #3a3a3a;
+                }
+
+                .number-row {
+                    margin-bottom: 18px;
                 }
 
             </style>
@@ -168,6 +188,25 @@ class Webserver:
                     <div class="value">Value: <span id="tilt_kd_value">{{ tilt_kd }}</span></div>
                 </div>
 
+                <div class="card">
+                    <h2>Manual Commands</h2>
+
+                    <div class="number-row">
+                        <label for="set_velocity">Set Velocity</label>
+                        <input type="number" id="set_velocity" step="any" value="{{ set_velocity }}">
+                    </div>
+
+                    <div class="number-row">
+                        <label for="set_position">Set Position</label>
+                        <input type="number" id="set_position" step="any" value="{{ set_position }}">
+                    </div>
+
+                    <div class="button-row">
+                        <button onclick="saveNumberField('set_velocity')">Send Velocity</button>
+                        <button onclick="saveNumberField('set_position')">Send Position</button>
+                    </div>
+                </div>
+
             </div>
 
             <div class="button-row">
@@ -183,6 +222,11 @@ class Webserver:
                 const sliderIds = [
                     "pan_kp","pan_ki","pan_kd",
                     "tilt_kp","tilt_ki","tilt_kd"
+                ];
+
+                const numberIds = [
+                    "set_velocity",
+                    "set_position"
                 ];
 
                 function setupSlider(sliderId) {
@@ -220,6 +264,34 @@ class Webserver:
                     });
                 }
 
+                async function saveNumberField(fieldId) {
+                    const input = document.getElementById(fieldId);
+                    const value = parseFloat(input.value);
+
+                    if (Number.isNaN(value)) {
+                        statusEl.textContent = "Invalid number";
+                        return;
+                    }
+
+                    const body = {};
+                    body[fieldId] = value;
+
+                    try {
+                        const response = await fetch("/save", {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json"
+                            },
+                            body: JSON.stringify(body)
+                        });
+
+                        const data = await response.json();
+                        statusEl.textContent = data.message;
+                    } catch {
+                        statusEl.textContent = "Save failed";
+                    }
+                }
+
                 async function resetDefaults() {
 
                     try {
@@ -239,6 +311,11 @@ class Webserver:
 
                             slider.value = data.gains[id];
                             valueEl.textContent = data.gains[id];
+                        });
+
+                        numberIds.forEach(id => {
+                            const input = document.getElementById(id);
+                            input.value = data.gains[id];
                         });
 
                         statusEl.textContent = data.message;
@@ -266,11 +343,39 @@ class Webserver:
             incoming = request.get_json()
             gains = self.load_gains()
 
+            velocity_updated = False
+            position_updated = False
+            new_velocity = None
+            new_position = None
+
             for key in incoming:
                 if key in gains:
                     gains[key] = float(incoming[key])
 
+                    if key == "set_velocity":
+                        velocity_updated = True
+                        new_velocity = gains[key]
+
+                    elif key == "set_position":
+                        position_updated = True
+                        new_position = gains[key]
+
             self.save_gains(gains)
+
+            if self.serial is not None:
+                try:
+                    if velocity_updated:
+                        self.serial.updateVelocity(new_velocity)
+
+                    if position_updated:
+                        self.serial.updatePosition(new_position)
+
+                except Exception as e:
+                    return jsonify({
+                        "success": False,
+                        "message": f"Saved, but serial update failed: {e}",
+                        "gains": gains
+                    }), 500
 
             print(
                 "[Webserver] Gains updated: "
@@ -279,7 +384,9 @@ class Webserver:
                 f"pan_kd:{gains['pan_kd']:.3f}, "
                 f"tilt_kp:{gains['tilt_kp']:.3f}, "
                 f"tilt_ki:{gains['tilt_ki']:.3f}, "
-                f"tilt_kd:{gains['tilt_kd']:.3f}"
+                f"tilt_kd:{gains['tilt_kd']:.3f}, "
+                f"set_velocity:{gains['set_velocity']:.3f}, "
+                f"set_position:{gains['set_position']:.3f}"
             )
 
             return jsonify({"success": True, "message": "Saved", "gains": gains})
