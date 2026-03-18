@@ -6,7 +6,8 @@
 #define TILT_STEP 4
 #define TILT_DIR 5
 
-#define HALL_PIN 9
+const int PAN_HALL_PIN = 9;
+const int TILT_HALL_PIN = 10;
 
 AccelStepper panStepper(AccelStepper::DRIVER, PAN_STEP, PAN_DIR);
 AccelStepper tiltStepper(AccelStepper::DRIVER, TILT_STEP, TILT_DIR);
@@ -15,10 +16,10 @@ AccelStepper tiltStepper(AccelStepper::DRIVER, TILT_STEP, TILT_DIR);
 // motor / driver settings
 // -----------------------------
 const float MOTOR_FULL_STEPS_PER_REV = 200.0f;
-const float MICROSTEPS = 16.0f; // change to match your driver
+const float MICROSTEPS = 16.0f;
 const float STEPS_PER_REV = MOTOR_FULL_STEPS_PER_REV * MICROSTEPS;
 
-// limits now written in RPM
+// limits in RPM
 const float MAX_SPEED_RPM = 300.0f;
 const float ACCEL_RPM_PER_SEC = 400.0f;
 
@@ -26,10 +27,20 @@ const float ACCEL_RPM_PER_SEC = 400.0f;
 const float MAX_SPEED_STEPS_PER_SEC = (MAX_SPEED_RPM * STEPS_PER_REV) / 60.0f;
 const float ACCEL_STEPS_PER_SEC2 = (ACCEL_RPM_PER_SEC * STEPS_PER_REV) / 60.0f;
 
-// position command units
-// if you want SET_POSITION to mean revolutions, keep this 1 rev = STEPS_PER_REV
-// if you want degrees later, we can change it
+// position units
 const float POSITION_UNITS_TO_STEPS = STEPS_PER_REV;
+
+// -----------------------------
+// error -> velocity tuning
+// units: RPM per pixel of error
+// start small, then increase
+// -----------------------------
+float PAN_ERROR_TO_RPM = 0.7f;
+float TILT_ERROR_TO_RPM = 0.7f;
+
+// invert axis if needed
+float PAN_DIRECTION_SIGN = 1.0f;
+float TILT_DIRECTION_SIGN = 1.0f;
 
 String inputBuffer = "";
 
@@ -37,7 +48,8 @@ enum ControlMode
 {
     MODE_IDLE,
     MODE_VELOCITY,
-    MODE_POSITION
+    MODE_POSITION,
+    MODE_ERROR
 };
 
 ControlMode mode = MODE_IDLE;
@@ -45,12 +57,19 @@ ControlMode mode = MODE_IDLE;
 float commandedVelocityRPM = 0.0f;
 float commandedPositionUnits = 0.0f;
 
+float panError = 0.0f;
+float tiltError = 0.0f;
+
+float panCommandedRPM = 0.0f;
+float tiltCommandedRPM = 0.0f;
+
 unsigned long lastStatusPrint = 0;
 const unsigned long STATUS_INTERVAL_MS = 200;
 
 void setup()
 {
-    pinMode(HALL_PIN, INPUT_PULLUP);
+    pinMode(PAN_HALL_PIN, INPUT_PULLUP);
+    pinMode(TILT_HALL_PIN, INPUT_PULLUP);
 
     Serial.begin(115200);
     while (!Serial && millis() < 4000)
@@ -65,19 +84,10 @@ void setup()
     tiltStepper.setAcceleration(ACCEL_STEPS_PER_SEC2);
     tiltStepper.setMinPulseWidth(2);
 
-    panStepper.setCurrentPosition(0);
-    tiltStepper.setCurrentPosition(0);
+    findZeroPos(panStepper, PAN_HALL_PIN);
+    findZeroPos(tiltStepper, TILT_HALL_PIN);
 
     Serial.println("[Teensy] Ready");
-    Serial.println("[Teensy] Velocity units = RPM");
-    Serial.println("[Teensy] Position units = revolutions");
-    Serial.print("[Teensy] STEPS_PER_REV = ");
-    Serial.println(STEPS_PER_REV, 1);
-    Serial.println("[Teensy] Commands:");
-    Serial.println("  SET_VELOCITY:x");
-    Serial.println("  SET_POSITION:x");
-    Serial.println("  STOP");
-    Serial.println("  ZERO");
 }
 
 void loop()
@@ -92,6 +102,10 @@ void loop()
 
     case MODE_POSITION:
         runPositionMode();
+        break;
+
+    case MODE_ERROR:
+        runErrorMode();
         break;
 
     case MODE_IDLE:
@@ -136,6 +150,10 @@ void parseCommand(const String &cmd)
     else if (cmd.startsWith("SET_POSITION:"))
     {
         handleSetPosition(cmd);
+    }
+    else if (cmd.startsWith("TARGET:"))
+    {
+        handleTargetError(cmd);
     }
     else if (cmd == "STOP")
     {
@@ -201,10 +219,40 @@ void handleSetPosition(const String &cmd)
     Serial.println(" steps)");
 }
 
+void handleTargetError(const String &cmd)
+{
+    const String prefix = "TARGET:";
+    String valueStr = cmd.substring(prefix.length());
+    valueStr.trim();
+
+    int commaIndex = valueStr.indexOf(',');
+    if (commaIndex < 0)
+    {
+        Serial.println("[Teensy] TARGET parse fail");
+        return;
+    }
+
+    String panErrStr = valueStr.substring(0, commaIndex);
+    String tiltErrStr = valueStr.substring(commaIndex + 1);
+
+    panErrStr.trim();
+    tiltErrStr.trim();
+
+    panError = panErrStr.toFloat();
+    tiltError = tiltErrStr.toFloat();
+
+    mode = MODE_ERROR;
+}
+
 void handleStop()
 {
     stopMotors();
     mode = MODE_IDLE;
+
+    panError = 0.0f;
+    tiltError = 0.0f;
+    panCommandedRPM = 0.0f;
+    tiltCommandedRPM = 0.0f;
 
     Serial.println("[Teensy] STOP");
 }
@@ -222,6 +270,11 @@ void handleZero()
 
     commandedVelocityRPM = 0.0f;
     commandedPositionUnits = 0.0f;
+    panError = 0.0f;
+    tiltError = 0.0f;
+    panCommandedRPM = 0.0f;
+    tiltCommandedRPM = 0.0f;
+
     mode = MODE_IDLE;
 
     Serial.println("[Teensy] ZERO");
@@ -246,6 +299,24 @@ void runPositionMode()
     tiltStepper.run();
 }
 
+void runErrorMode()
+{
+    panCommandedRPM = PAN_DIRECTION_SIGN * panError * PAN_ERROR_TO_RPM;
+    tiltCommandedRPM = TILT_DIRECTION_SIGN * tiltError * TILT_ERROR_TO_RPM;
+
+    panCommandedRPM = constrain(panCommandedRPM, -MAX_SPEED_RPM, MAX_SPEED_RPM);
+    tiltCommandedRPM = constrain(tiltCommandedRPM, -MAX_SPEED_RPM, MAX_SPEED_RPM);
+
+    float panStepsPerSec = rpmToStepsPerSec(panCommandedRPM);
+    float tiltStepsPerSec = rpmToStepsPerSec(tiltCommandedRPM);
+
+    panStepper.setSpeed(panStepsPerSec);
+    tiltStepper.setSpeed(tiltStepsPerSec);
+
+    panStepper.runSpeed();
+    tiltStepper.runSpeed();
+}
+
 void runIdleMode()
 {
 }
@@ -267,48 +338,31 @@ float rpmToStepsPerSec(float rpm)
     return (rpm * STEPS_PER_REV) / 60.0f;
 }
 
-void printStatusPeriodically()
+void findZeroPos(AccelStepper &motor, int HALL_PIN)
 {
-    unsigned long now = millis();
-    if (now - lastStatusPrint < STATUS_INTERVAL_MS)
+    Serial.println("finding 0");
+
+    const float SEARCH_SPEED = 400.0f;
+    const float CREEP_SPEED = 80.0f;
+
+    int startState = digitalRead(HALL_PIN);
+
+    motor.setSpeed(SEARCH_SPEED);
+    while (digitalRead(HALL_PIN) == startState)
     {
-        return;
+        motor.runSpeed();
     }
 
-    lastStatusPrint = now;
+    int newState = digitalRead(HALL_PIN);
 
-    Serial.print("[Status] mode=");
-    switch (mode)
+    motor.setSpeed(CREEP_SPEED);
+    while (digitalRead(HALL_PIN) == newState)
     {
-    case MODE_VELOCITY:
-        Serial.print("VEL");
-        break;
-    case MODE_POSITION:
-        Serial.print("POS");
-        break;
-    default:
-        Serial.print("IDLE");
-        break;
+        motor.runSpeed();
     }
 
-    Serial.print(" panPos=");
-    Serial.print(panStepper.currentPosition());
+    motor.setSpeed(0);
+    motor.setCurrentPosition(0);
 
-    Serial.print(" tiltPos=");
-    Serial.print(tiltStepper.currentPosition());
-
-    Serial.print(" panSpeedSteps=");
-    Serial.print(panStepper.speed(), 1);
-
-    Serial.print(" velRPM=");
-    Serial.print(commandedVelocityRPM, 2);
-
-    if (mode == MODE_POSITION)
-    {
-        Serial.print(" panTarget=");
-        Serial.print(panStepper.targetPosition());
-    }
-
-    Serial.print(" hall=");
-    Serial.println(digitalRead(HALL_PIN));
-} 
+    Serial.println("ZERO FOUND");
+}

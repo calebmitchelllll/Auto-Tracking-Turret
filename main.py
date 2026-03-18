@@ -2,8 +2,6 @@ import cv2
 import threading
 import time
 
-from Utils import print_fps
-
 from Camera import Camera
 from Detector import Detector
 from Webserver import Webserver
@@ -11,37 +9,18 @@ from KalmanFilter2D import KalmanFilter2D
 from SerialController import SerialController
 
 
-def serial_reader_loop(serial_controller):
-    while True:
-        try:
-            serial_controller.readLine()
-        except Exception as e:
-            print(f"[Serial Reader] {e}")
-        time.sleep(0.01)
-
-
 # -----------------------------
-# serial init
+# serial controller init
 # -----------------------------
-serial_controller = SerialController(
-    port="/dev/cu.usbmodem183380201",
-    baudrate=115200
-)
+serial_controller = SerialController(port="/dev/cu.usbmodem183380201", baudrate=115200)
 serial_controller.connect()
+serial_controller.start_reader()
 
 # -----------------------------
 # webserver init
 # -----------------------------
-server = Webserver(
-    json_file="saved_data/gains.json",
-    host="127.0.0.1",
-    port=5000,
-    serial=serial_controller
-)
+server = Webserver(json_file="saved_data/gains.json", host="127.0.0.1", port=5000, serial=serial_controller)
 threading.Thread(target=server.run, daemon=True).start()
-
-# optional serial print reader from teensy
-threading.Thread(target=serial_reader_loop, args=(serial_controller,), daemon=True).start()
 
 # -----------------------------
 # camera / detector / filter
@@ -49,15 +28,10 @@ threading.Thread(target=serial_reader_loop, args=(serial_controller,), daemon=Tr
 cam = Camera()
 det = Detector("YOLO/nano.pt")
 
-kf = KalmanFilter2D(
-    process_noise=300.0,
-    measurement_noise=8.0,
-    initial_uncertainty=500.0,
-    max_dt=0.1,
-    max_missed=10
-)
+kf = KalmanFilter2D(process_noise=300.0, measurement_noise=8.0, initial_uncertainty=500.0, max_dt=0.1, max_missed=10)
 
 prev_time = time.time()
+smoothed_fps = 0.0
 
 deadband_x = 8
 deadband_y = 8
@@ -69,7 +43,16 @@ counter = 0
 
 while True:
 
-    serial_controller.sendHeartbeat(counter)
+    now = time.time()
+    dt = now - prev_time
+    prev_time = now
+
+    if dt > 0:
+        instant_fps = 1.0 / dt
+        smoothed_fps = 0.9 * smoothed_fps + 0.1 * instant_fps if smoothed_fps > 0 else instant_fps
+        server.set_main_loop_fps(smoothed_fps)
+
+    serial_controller.sendHeartbeat(counter) #send heartbeat every 10 frames
 
     small = cam.read()
     if small is None:
@@ -142,11 +125,11 @@ while True:
     # -----------------------------
     # send target error to teensy
     # -----------------------------
-    #if serial_controller.isConnected():
-        #try:
-            #serial_controller.sendTargetError(teensy_err_x, teensy_err_y)
-        #except Exception as e:
-            #print(f"[Serial TX Error] {e}")
+    if serial_controller.isConnected():
+        try:
+            serial_controller.sendTargetError(teensy_err_x, teensy_err_y)
+        except Exception as e:
+            print(f"[Serial TX Error] {e}")
 
     # draw selected bbox only if a real detection was used this frame
     if had_real_detection and x1 is not None:
@@ -183,15 +166,6 @@ while True:
             (255, 0, 0),
             2
         )
-
-    prev_time = print_fps(prev_time)
-
-    if kf.initialized:
-        print("\033[2K\r" + f"[TEENSY ERROR] ({teensy_err_x:6.1f}, {teensy_err_y:6.1f})")
-    else:
-        print("\033[2K\r[TEENSY ERROR] none")
-
-    print("\033[F\033[F", end="")
 
     cv2.imshow("camera", small)
 

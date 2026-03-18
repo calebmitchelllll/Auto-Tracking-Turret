@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, render_template_string
 import json
 import os
+import threading
 
 
 class Webserver:
@@ -10,6 +11,7 @@ class Webserver:
         self.port = port
         self.serial = serial
         self.app = Flask(__name__)
+
         self.default_gains = {
             "pan_kp": 1.0,
             "pan_ki": 1.0,
@@ -20,6 +22,11 @@ class Webserver:
             "set_velocity": 0.0,
             "set_position": 0.0
         }
+
+        # live status data
+        self.main_loop_fps = 0.0
+        self._status_lock = threading.Lock()
+
         self._setup_routes()
 
     def load_gains(self):
@@ -48,6 +55,14 @@ class Webserver:
         with open(self.json_file, "w") as f:
             json.dump(data, f, indent=2)
 
+    def set_main_loop_fps(self, fps):
+        with self._status_lock:
+            self.main_loop_fps = float(fps)
+
+    def get_main_loop_fps(self):
+        with self._status_lock:
+            return self.main_loop_fps
+
     def _setup_routes(self):
         HTML = """
         <!DOCTYPE html>
@@ -56,7 +71,6 @@ class Webserver:
             <title>Pan / Tilt PID Gains</title>
             <meta name="viewport" content="width=device-width, initial-scale=1" />
             <style>
-
                 body {
                     font-family: Arial, sans-serif;
                     max-width: 1100px;
@@ -64,6 +78,34 @@ class Webserver:
                     padding: 20px;
                     background: #111;
                     color: white;
+                }
+
+                .top-bar {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 20px;
+                    flex-wrap: wrap;
+                    margin-bottom: 20px;
+                }
+
+                .fps-box {
+                    background: #1c1c1c;
+                    padding: 14px 18px;
+                    border-radius: 12px;
+                    min-width: 220px;
+                }
+
+                .fps-label {
+                    color: #aaa;
+                    font-size: 14px;
+                    margin-bottom: 4px;
+                }
+
+                .fps-value {
+                    font-size: 28px;
+                    font-weight: bold;
+                    color: #7CFC00;
                 }
 
                 .card-container {
@@ -146,13 +188,19 @@ class Webserver:
                 .number-row {
                     margin-bottom: 18px;
                 }
-
             </style>
         </head>
 
         <body>
 
-            <h1>Pan / Tilt PID Gain Tuning</h1>
+            <div class="top-bar">
+                <h1>Pan / Tilt PID Gain Tuning</h1>
+
+                <div class="fps-box">
+                    <div class="fps-label">Main Loop FPS</div>
+                    <div class="fps-value" id="main_loop_fps">0.00</div>
+                </div>
+            </div>
 
             <div class="card-container">
 
@@ -216,8 +264,8 @@ class Webserver:
             <div class="status" id="status">Ready</div>
 
             <script>
-
                 const statusEl = document.getElementById("status");
+                const fpsEl = document.getElementById("main_loop_fps");
 
                 const sliderIds = [
                     "pan_kp","pan_ki","pan_kd",
@@ -230,7 +278,6 @@ class Webserver:
                 ];
 
                 function setupSlider(sliderId) {
-
                     const slider = document.getElementById(sliderId);
                     const valueEl = document.getElementById(sliderId + "_value");
 
@@ -240,12 +287,10 @@ class Webserver:
                     });
 
                     slider.addEventListener("change", async () => {
-
                         const body = {};
                         body[sliderId] = parseFloat(slider.value);
 
                         try {
-
                             const response = await fetch("/save", {
                                 method: "POST",
                                 headers: {
@@ -256,11 +301,9 @@ class Webserver:
 
                             const data = await response.json();
                             statusEl.textContent = data.message;
-
                         } catch {
                             statusEl.textContent = "Save failed";
                         }
-
                     });
                 }
 
@@ -293,9 +336,7 @@ class Webserver:
                 }
 
                 async function resetDefaults() {
-
                     try {
-
                         const response = await fetch("/reset", {
                             method: "POST",
                             headers: {
@@ -319,14 +360,24 @@ class Webserver:
                         });
 
                         statusEl.textContent = data.message;
-
                     } catch {
                         statusEl.textContent = "Reset failed";
                     }
                 }
 
-                sliderIds.forEach(setupSlider);
+                async function updateStatus() {
+                    try {
+                        const response = await fetch("/status");
+                        const data = await response.json();
+                        fpsEl.textContent = data.main_loop_fps.toFixed(2);
+                    } catch {
+                        fpsEl.textContent = "--";
+                    }
+                }
 
+                sliderIds.forEach(setupSlider);
+                updateStatus();
+                setInterval(updateStatus, 300);
             </script>
 
         </body>
@@ -355,7 +406,6 @@ class Webserver:
                     if key == "set_velocity":
                         velocity_updated = True
                         new_velocity = gains[key]
-
                     elif key == "set_position":
                         position_updated = True
                         new_position = gains[key]
@@ -404,8 +454,13 @@ class Webserver:
         def get_gains():
             return jsonify(self.load_gains())
 
-    def run(self):
+        @self.app.route("/status", methods=["GET"])
+        def get_status():
+            return jsonify({
+                "main_loop_fps": self.get_main_loop_fps()
+            })
 
+    def run(self):
         import logging
         import flask.cli
 

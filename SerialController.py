@@ -1,4 +1,5 @@
 import time
+import threading
 import serial
 import serial.tools.list_ports
 
@@ -8,7 +9,9 @@ class SerialController:
         self.port = port
         self.baudrate = baudrate
         self.ser = None
-            
+
+        self.reader_thread = None
+        self.reader_running = False
 
     def connect(self):
         try:
@@ -20,6 +23,18 @@ class SerialController:
             print(f"[Serial] Connection failed: {e}")
             self.ser = None
             return False
+
+    def disconnect(self):
+        self.stop_reader()
+
+        if self.ser is not None:
+            try:
+                self.ser.close()
+                print("[Serial] Disconnected")
+            except Exception as e:
+                print(f"[Serial] Disconnect error: {e}")
+
+        self.ser = None
 
     def isConnected(self):
         return self.ser is not None and self.ser.is_open
@@ -59,6 +74,32 @@ class SerialController:
             print(f"[Serial] Read error: {e}")
 
         return None
+
+    def _reader_loop(self):
+        while self.reader_running:
+            try:
+                self.readLine()
+            except Exception as e:
+                print(f"[Serial Reader] {e}")
+            time.sleep(0.01)
+
+    def start_reader(self):
+        if self.reader_thread is not None and self.reader_thread.is_alive():
+            print("[Serial] Reader already running")
+            return
+
+        self.reader_running = True
+        self.reader_thread = threading.Thread(target=self._reader_loop, daemon=True)
+        self.reader_thread.start()
+        print("[Serial] Reader thread started")
+
+    def stop_reader(self):
+        self.reader_running = False
+
+        if self.reader_thread is not None:
+            self.reader_thread.join(timeout=1.0)
+            self.reader_thread = None
+            print("[Serial] Reader thread stopped")
 
     @staticmethod
     def list_ports():
