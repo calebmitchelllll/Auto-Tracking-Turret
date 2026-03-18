@@ -8,12 +8,44 @@ from Camera import Camera
 from Detector import Detector
 from Webserver import Webserver
 from KalmanFilter2D import KalmanFilter2D
+from SerialController import SerialController
 
 
-# initializations
-server = Webserver(json_file="saved_data/gains.json", host="127.0.0.1", port=5000)
+def serial_reader_loop(serial_controller):
+    while True:
+        try:
+            serial_controller.readLine()
+        except Exception as e:
+            print(f"[Serial Reader] {e}")
+        time.sleep(0.01)
+
+
+# -----------------------------
+# serial init
+# -----------------------------
+serial_controller = SerialController(
+    port="/dev/cu.usbmodem183380201",
+    baudrate=115200
+)
+serial_controller.connect()
+
+# -----------------------------
+# webserver init
+# -----------------------------
+server = Webserver(
+    json_file="saved_data/gains.json",
+    host="127.0.0.1",
+    port=5000,
+    serial=serial_controller
+)
 threading.Thread(target=server.run, daemon=True).start()
 
+# optional serial print reader from teensy
+threading.Thread(target=serial_reader_loop, args=(serial_controller,), daemon=True).start()
+
+# -----------------------------
+# camera / detector / filter
+# -----------------------------
 cam = Camera()
 det = Detector("YOLO/nano.pt")
 
@@ -33,7 +65,12 @@ deadband_y = 8
 prediction_time = 0.25
 max_jump = 120
 
+counter = 0
+
 while True:
+
+    serial_controller.sendHeartbeat(counter)
+
     small = cam.read()
     if small is None:
         continue
@@ -69,7 +106,6 @@ while True:
             smooth_cx, smooth_cy = kf.update(raw_cx, raw_cy)
             had_real_detection = True
         else:
-            # reject wild jump
             kf.mark_missed()
     else:
         kf.mark_missed()
@@ -84,8 +120,12 @@ while True:
         if future is not None:
             pred_x, pred_y = future
 
-        err_x = pred_x - center_x
-        err_y = pred_y - center_y
+        if pred_x is not None and pred_y is not None:
+            err_x = pred_x - center_x
+            err_y = pred_y - center_y
+        else:
+            err_x = 0
+            err_y = 0
 
         if abs(err_x) < deadband_x:
             err_x = 0
@@ -98,6 +138,15 @@ while True:
     else:
         teensy_err_x = 0
         teensy_err_y = 0
+
+    # -----------------------------
+    # send target error to teensy
+    # -----------------------------
+    #if serial_controller.isConnected():
+        #try:
+            #serial_controller.sendTargetError(teensy_err_x, teensy_err_y)
+        #except Exception as e:
+            #print(f"[Serial TX Error] {e}")
 
     # draw selected bbox only if a real detection was used this frame
     if had_real_detection and x1 is not None:
@@ -149,5 +198,9 @@ while True:
     if cv2.pollKey() == 27:
         break
 
+    counter += 1
+
+
+serial_controller.updateVelocity(0)
 cam.release()
 cv2.destroyAllWindows()
