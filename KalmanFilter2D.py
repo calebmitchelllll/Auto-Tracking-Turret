@@ -143,6 +143,7 @@ class KalmanFilter2D:
             "vx": float(self.x[2, 0]),
             "vy": float(self.x[3, 0]),
         }
+
     def predict_ahead(self, dt_ahead):
         if not self.initialized:
             return None
@@ -167,7 +168,7 @@ class KalmanFilter2D:
         dy = meas_y - pred_y
 
         return (dx * dx + dy * dy) <= (max_jump * max_jump)
-    
+
     def choose_best_detection(self, detections):
         """
         Choose the detection that best matches the current Kalman track.
@@ -196,3 +197,93 @@ class KalmanFilter2D:
                 best_det = det
 
         return best_det
+
+    def process_frame(
+        self,
+        raw_detections,
+        center_x,
+        center_y,
+        deadband_x=8,
+        deadband_y=8,
+        prediction_time=0.25,
+        max_jump=120,
+    ):
+        """
+        Run the full per-frame Kalman pipeline.
+
+        Steps:
+          1. Predict forward (if initialized)
+          2. Pick the best detection
+          3. Validate and update, or mark missed
+          4. Read smoothed state and predict ahead
+          5. Compute error with deadband
+
+        Returns
+        -------
+        err_x : float
+            Signed horizontal error (predicted_x - center_x), deadbanded.
+        err_y : float
+            Signed vertical error (predicted_y - center_y), deadbanded.
+        visuals : dict with keys:
+            smooth_cx, smooth_cy  – current smoothed position (or None)
+            pred_x, pred_y        – predicted future position (or None)
+            bbox                  – (x1, y1, x2, y2) of matched detection, or None
+            had_real_detection    – True if a valid measurement was used this frame
+        """
+        # Step 1 – predict
+        if self.initialized:
+            self.predict()
+
+        # Step 2 – pick best detection
+        best_detection = self.choose_best_detection(raw_detections)
+
+        smooth_cx = smooth_cy = None
+        pred_x = pred_y = None
+        bbox = None
+        had_real_detection = False
+
+        # Step 3 – update or mark missed
+        if best_detection is not None:
+            raw_cx, raw_cy, x1, y1, x2, y2 = best_detection
+            if self.is_measurement_reasonable(raw_cx, raw_cy, max_jump=max_jump):
+                smooth_cx, smooth_cy = self.update(raw_cx, raw_cy)
+                bbox = (x1, y1, x2, y2)
+                had_real_detection = True
+            else:
+                self.mark_missed()
+        else:
+            self.mark_missed()
+
+        # Step 4 – read state and predict ahead
+        if self.initialized:
+            state = self.get_state()
+            smooth_cx = state["x"]
+            smooth_cy = state["y"]
+
+            future = self.predict_ahead(prediction_time)
+            if future is not None:
+                pred_x, pred_y = future
+
+        # Step 5 – compute deadbanded error
+        if pred_x is not None and pred_y is not None:
+            err_x = pred_x - center_x
+            err_y = pred_y - center_y
+        else:
+            err_x = 0.0
+            err_y = 0.0
+
+        if abs(err_x) < deadband_x:
+            err_x = 0.0
+        if abs(err_y) < deadband_y:
+            err_y = 0.0
+
+        visuals = {
+            "smooth_cx": smooth_cx,
+            "smooth_cy": smooth_cy,
+            "pred_x": pred_x,
+            "pred_y": pred_y,
+            "bbox": bbox,
+            "had_real_detection": had_real_detection,
+        }
+
+        return err_x, err_y, visuals

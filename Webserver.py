@@ -13,6 +13,7 @@ class Webserver:
         self.app = Flask(__name__)
 
         self.default_gains = {
+            "mode": "idle",
             "pan_kp": 1.0,
             "pan_ki": 1.0,
             "pan_kd": 1.0,
@@ -63,6 +64,9 @@ class Webserver:
         with self._status_lock:
             return self.main_loop_fps
 
+    def get_mode(self):
+        return self.load_gains().get("mode", self.default_gains["mode"])
+
     def _setup_routes(self):
         HTML = """
         <!DOCTYPE html>
@@ -106,6 +110,46 @@ class Webserver:
                     font-size: 28px;
                     font-weight: bold;
                     color: #7CFC00;
+                }
+
+                .mode-box {
+                    background: #1c1c1c;
+                    padding: 14px 18px;
+                    border-radius: 12px;
+                }
+
+                .mode-label {
+                    color: #aaa;
+                    font-size: 14px;
+                    margin-bottom: 8px;
+                }
+
+                .mode-buttons {
+                    display: flex;
+                    gap: 8px;
+                }
+
+                .mode-btn {
+                    background: #2d2d2d;
+                    color: #aaa;
+                    border: 2px solid transparent;
+                    padding: 8px 16px;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    font-weight: bold;
+                    transition: background 0.15s, color 0.15s, border-color 0.15s;
+                }
+
+                .mode-btn:hover {
+                    background: #3a3a3a;
+                    color: white;
+                }
+
+                .mode-btn.active {
+                    background: #1a3a1a;
+                    color: #7CFC00;
+                    border-color: #7CFC00;
                 }
 
                 .card-container {
@@ -195,6 +239,15 @@ class Webserver:
 
             <div class="top-bar">
                 <h1>Pan / Tilt PID Gain Tuning</h1>
+
+                <div class="mode-box">
+                    <div class="mode-label">Mode</div>
+                    <div class="mode-buttons">
+                        <button class="mode-btn" data-mode="idle"   onclick="setMode('idle')">Idle</button>
+                        <button class="mode-btn" data-mode="track"  onclick="setMode('track')">Track</button>
+                        <button class="mode-btn" data-mode="manual" onclick="setMode('manual')">Manual</button>
+                    </div>
+                </div>
 
                 <div class="fps-box">
                     <div class="fps-label">Main Loop FPS</div>
@@ -375,7 +428,29 @@ class Webserver:
                     }
                 }
 
+                async function setMode(mode) {
+                    try {
+                        const response = await fetch("/save", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ mode })
+                        });
+                        const data = await response.json();
+                        statusEl.textContent = data.message;
+                        updateModeButtons(mode);
+                    } catch {
+                        statusEl.textContent = "Mode save failed";
+                    }
+                }
+
+                function updateModeButtons(activeMode) {
+                    document.querySelectorAll(".mode-btn").forEach(btn => {
+                        btn.classList.toggle("active", btn.dataset.mode === activeMode);
+                    });
+                }
+
                 sliderIds.forEach(setupSlider);
+                updateModeButtons("{{ mode }}");
                 updateStatus();
                 setInterval(updateStatus, 300);
             </script>
@@ -401,7 +476,10 @@ class Webserver:
 
             for key in incoming:
                 if key in gains:
-                    gains[key] = float(incoming[key])
+                    if key == "mode":
+                        gains[key] = str(incoming[key])
+                    else:
+                        gains[key] = float(incoming[key])
 
                     if key == "set_velocity":
                         velocity_updated = True
@@ -429,6 +507,7 @@ class Webserver:
 
             print(
                 "[Webserver] Gains updated: "
+                f"mode:{gains['mode']}, "
                 f"pan_kp:{gains['pan_kp']:.3f}, "
                 f"pan_ki:{gains['pan_ki']:.3f}, "
                 f"pan_kd:{gains['pan_kd']:.3f}, "
