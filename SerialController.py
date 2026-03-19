@@ -50,6 +50,12 @@ class SerialController:
     def sendHeartbeat(self, counter):
         if counter % 10 == 0:
             self.sendLine("HEARTBEAT")
+    
+    def updateGains(self, pan_kp, pan_ki, pan_kd, tilt_kp, tilt_ki, tilt_kd):
+        self.sendLine(f"SET_GAINS:{pan_kp:.2f},{pan_ki:.2f},{pan_kd:.2f},{tilt_kp:.2f},{tilt_ki:.2f},{tilt_kd:.2f}")
+    
+    def updateMode(self, mode):
+        self.sendLine(f"SET_MODE:{mode.upper()}")
 
     def updateVelocity(self, value):
         self.sendLine(f"SET_VELOCITY:{value}")
@@ -57,8 +63,12 @@ class SerialController:
     def updatePosition(self, value):
         self.sendLine(f"SET_POSITION:{value}")
 
-    def sendTargetError(self, err_x, err_y):
-        self.sendLine(f"TARGET:{err_x:.2f},{err_y:.2f}")
+    def sendTargetError(self, err_x, err_y,):
+        if self.isConnected():
+            try:
+                self.sendLine(f"TARGET:{err_x:.2f},{err_y:.2f}")
+            except Exception as e:
+                print(f"[Serial TX Error] {e}")
 
     def readLine(self):
         if not self.isConnected():

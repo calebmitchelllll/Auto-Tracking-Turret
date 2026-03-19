@@ -1,3 +1,4 @@
+import cv2
 import torch
 from ultralytics import YOLO
 
@@ -41,3 +42,30 @@ class Detector:
             return []
 
         return [best_detection]
+    
+    def handleVisuals(self, visuals, frame):
+        h, w = frame.shape[:2]
+        center_x = w // 2
+        center_y = h // 2
+
+        smooth_cx = visuals["smooth_cx"]
+        ...
+        smooth_cx = visuals["smooth_cx"]
+        smooth_cy = visuals["smooth_cy"]
+        pred_x    = visuals["pred_x"]
+        pred_y    = visuals["pred_y"]
+        bbox      = visuals["bbox"]
+
+        if visuals["had_real_detection"] and bbox is not None:
+            x1, y1, x2, y2 = bbox
+            cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+
+        if smooth_cx is not None and smooth_cy is not None:
+            cv2.circle(frame, (int(smooth_cx), int(smooth_cy)), 5, (255, 255, 0), -1)
+
+        if pred_x is not None and pred_y is not None:
+            cv2.circle(frame, (int(pred_x), int(pred_y)), 6, (0, 0, 255), -1)
+
+        if smooth_cx is not None and smooth_cy is not None and pred_x is not None and pred_y is not None:
+            cv2.arrowedLine(frame, (int(smooth_cx), int(smooth_cy)), (int(pred_x), int(pred_y)), (0, 255, 255), 2, tipLength=0.6)
+            cv2.line(frame, (int(center_x), int(center_y)), (int(pred_x), int(pred_y)), (255, 0, 0), 2)

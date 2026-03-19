@@ -163,6 +163,7 @@ void parseCommand(const String &cmd)
     {
         handleZero();
     }
+    else if (cmd == "")
     else if (cmd == "HEARTBEAT")
     {
         handleHeartbeat();

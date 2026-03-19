@@ -63,11 +63,7 @@ class Camera:
         if not ret:
             return None
 
-        small = cv2.resize(
-            frame,
-            (self.infer_width, self.infer_height),
-            interpolation=cv2.INTER_LINEAR
-        )
+        small = cv2.resize(frame, (self.infer_width, self.infer_height), interpolation=cv2.INTER_LINEAR)
 
         return small
 

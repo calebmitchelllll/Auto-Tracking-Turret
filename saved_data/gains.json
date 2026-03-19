@@ -1,11 +1,11 @@
 {
-  "mode": "track",
-  "pan_kp": 1.0,
-  "pan_ki": 1.0,
-  "pan_kd": 1.0,
-  "tilt_kp": 1.0,
-  "tilt_ki": 1.0,
-  "tilt_kd": 1.0,
-  "set_velocity": 0.0,
-  "set_position": 0.0
+  "mode": "manual",
+  "pan_kp": 1.26,
+  "pan_ki": 0.0,
+  "pan_kd": 1.28,
+  "tilt_kp": 3.47,
+  "tilt_ki": 0.0,
+  "tilt_kd": 0.0,
+  "set_velocity": 30.0,
+  "set_position": 60.0
 }

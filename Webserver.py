@@ -3,7 +3,6 @@ import json
 import os
 import threading
 
-
 class Webserver:
     def __init__(self, json_file="./saved_data/gains.json", host="127.0.0.1", port=5000, serial=None):
         self.json_file = json_file
@@ -15,20 +14,26 @@ class Webserver:
         self.default_gains = {
             "mode": "idle",
             "pan_kp": 1.0,
-            "pan_ki": 1.0,
-            "pan_kd": 1.0,
+            "pan_ki": 0.0,
+            "pan_kd": 0.0,
             "tilt_kp": 1.0,
-            "tilt_ki": 1.0,
-            "tilt_kd": 1.0,
+            "tilt_ki": 0.0,
+            "tilt_kd": 0.0,
             "set_velocity": 0.0,
             "set_position": 0.0
         }
 
         # live status data
-        self.main_loop_fps = 0.0
+        self.main_loop_fps = 0.0 
         self._status_lock = threading.Lock()
 
         self._setup_routes()
+        if self.serial is not None:
+            gains = self.load_gains()
+            self.serial.updateGains(
+                gains["pan_kp"], gains["pan_ki"], gains["pan_kd"],
+                gains["tilt_kp"], gains["tilt_ki"], gains["tilt_kd"]
+            )
 
     def load_gains(self):
         if not os.path.exists(self.json_file):
@@ -471,19 +476,30 @@ class Webserver:
 
             velocity_updated = False
             position_updated = False
+            gains_updated = False
+            mode_updated = False
             new_velocity = None
             new_position = None
+            new_mode = None
+
+            GAIN_KEYS = {"pan_kp", "pan_ki", "pan_kd", "tilt_kp", "tilt_ki", "tilt_kd"}
 
             for key in incoming:
                 if key in gains:
                     if key == "mode":
                         gains[key] = str(incoming[key])
+                        mode_updated = True
+                        new_mode = gains[key]
                     else:
                         gains[key] = float(incoming[key])
 
-                    if key == "set_velocity":
+                    if key in GAIN_KEYS:
+                        gains_updated = True
+
+                    elif key == "set_velocity":
                         velocity_updated = True
                         new_velocity = gains[key]
+
                     elif key == "set_position":
                         position_updated = True
                         new_position = gains[key]
@@ -492,9 +508,15 @@ class Webserver:
 
             if self.serial is not None:
                 try:
+                    if mode_updated:
+                        self.serial.updateMode(new_mode)
+                    if gains_updated:
+                        self.serial.updateGains(
+                            gains["pan_kp"], gains["pan_ki"], gains["pan_kd"],
+                            gains["tilt_kp"], gains["tilt_ki"], gains["tilt_kd"]
+                        )
                     if velocity_updated:
                         self.serial.updateVelocity(new_velocity)
-
                     if position_updated:
                         self.serial.updatePosition(new_position)
 
@@ -505,20 +527,7 @@ class Webserver:
                         "gains": gains
                     }), 500
 
-            print(
-                "[Webserver] Gains updated: "
-                f"mode:{gains['mode']}, "
-                f"pan_kp:{gains['pan_kp']:.3f}, "
-                f"pan_ki:{gains['pan_ki']:.3f}, "
-                f"pan_kd:{gains['pan_kd']:.3f}, "
-                f"tilt_kp:{gains['tilt_kp']:.3f}, "
-                f"tilt_ki:{gains['tilt_ki']:.3f}, "
-                f"tilt_kd:{gains['tilt_kd']:.3f}, "
-                f"set_velocity:{gains['set_velocity']:.3f}, "
-                f"set_position:{gains['set_position']:.3f}"
-            )
-
-            return jsonify({"success": True, "message": "Saved", "gains": gains})
+            return jsonify({"success": True, "message": "Saved", "gains": gains})  # ✅ Add this
 
         @self.app.route("/reset", methods=["POST"])
         def reset():
