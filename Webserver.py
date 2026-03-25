@@ -527,7 +527,7 @@ class Webserver:
                         "gains": gains
                     }), 500
 
-            return jsonify({"success": True, "message": "Saved", "gains": gains})  # ✅ Add this
+            return jsonify({"success": True, "message": "Saved", "gains": gains})
 
         @self.app.route("/reset", methods=["POST"])
         def reset():

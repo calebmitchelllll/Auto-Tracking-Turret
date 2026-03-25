@@ -65,7 +65,6 @@ while True:
     h, w = small.shape[:2]
     center_x = w / 2
     center_y = h / 2
-    
     # -----------------------------
     # idle
     # -----------------------------
@@ -78,9 +77,13 @@ while True:
     # -----------------------------
     if mode == "track":
         raw_detections = det.detect(small)
+
         err_x, err_y, visuals = kf.process_frame(raw_detections, center_x, center_y, deadband_x=8, deadband_y=8, prediction_time=0.25, max_jump=120)
+
         serial_controller.sendTargetError(err_x, err_y)
+
         det.handleVisuals(visuals, small)
+
 
     # -----------------------------
     # manual — velocity from gains, no tracking

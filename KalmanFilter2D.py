@@ -1,7 +1,6 @@
 import numpy as np
 import time
 
-
 class KalmanFilter2D:
     def __init__(
         self,
@@ -53,10 +52,10 @@ class KalmanFilter2D:
         q = self.process_noise
 
         return q * np.array([
-            [dt4 / 4, 0,       dt3 / 2, 0],
-            [0,       dt4 / 4, 0,       dt3 / 2],
-            [dt3 / 2, 0,       dt2,     0],
-            [0,       dt3 / 2, 0,       dt2]
+            [dt4 / 4,    0, dt3 / 2, 0],
+            [0, dt4 / 4, 0, dt3 / 2],
+            [dt3 / 2, 0, dt2, 0],
+            [0, dt3 / 2, 0, dt2]
         ], dtype=np.float32)
 
     def reset(self):
